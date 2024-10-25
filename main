@@ -1,0 +1,52 @@
+import asyncio
+import os
+from urllib.parse import urlparse, urljoin
+import pandas as pd
+from crowd_sdk.tagme import TagmeClientAdvanced
+
+
+async def get_dataset_file_info(client: TagmeClientAdvanced, dataset_id, organization_id):
+    files_info = await client.get_dataset_files(dataset_id=dataset_id, organization_id=organization_id)
+
+    dataset_files = []
+    for file_info in files_info:
+        dataset_files.append({
+            'file_name': file_info.name,
+            'file_id': file_info.id,
+            'link': urljoin(client.url, f'api/v0/files/{file_info.id}')
+        })
+    return dataset_files
+
+
+def construct_config(config: dict) -> dict:
+    if config['netloc'] == 'tagme.apps.prom-gen.sigma.sbrf.ru':
+        config['config_path'] = os.path.expanduser('~/configs/.sigma.cfg')
+    elif config['netloc'] == 'tagme.sberdevices.ru':
+        config['config_path'] = os.path.expanduser('~/configs/.cloud.cfg')
+    return config
+
+
+async def main():
+    dataset_url = input("Введите ссылку на датасет: ")
+
+    parsed_url = urlparse(dataset_url)
+    path_parts = parsed_url.path.split('/')
+    dataset_id = path_parts[-1]
+    organization_id = path_parts[-3]
+
+    config = construct_config({'netloc': parsed_url.netloc})
+
+    client = TagmeClientAdvanced(config['config_path'])
+
+    dataset_files_info = await get_dataset_file_info(client, dataset_id, organization_id)
+
+    df = pd.DataFrame(dataset_files_info)
+
+    if not os.path.exists('out'):
+        os.makedirs('out')
+    df.to_excel(f'out/dataset_files_info.xlsx', index=False)
+    print("Успешно сохранено в папку out")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
